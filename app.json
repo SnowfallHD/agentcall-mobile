@@ -11,10 +11,10 @@
     "githubUrl": "https://github.com/SnowfallHD/agentcall-mobile",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.snowfallhd.agentcall"
+      "bundleIdentifier": "ai.kryden.agentcall"
     },
     "android": {
-      "package": "com.snowfallhd.agentcall",
+      "package": "ai.kryden.agentcall",
       "adaptiveIcon": {
         "backgroundColor": "#08111F",
         "foregroundImage": "./assets/android-icon-foreground.png",

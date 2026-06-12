@@ -58,12 +58,14 @@ Useful docs in this repo:
 
 ## App identifiers and forks
 
-The official SnowfallHD build uses:
+The official Kryden/SnowfallHD build uses Kryden's reverse-domain app ID convention:
 
 ```text
-ios.bundleIdentifier: com.snowfallhd.agentcall
-android.package:       com.snowfallhd.agentcall
+ios.bundleIdentifier: ai.kryden.agentcall
+android.package:       ai.kryden.agentcall
 ```
+
+For future Kryden apps, use `ai.kryden.{projectname}` with no platform suffix unless the product name itself includes it. Examples: `ai.kryden.nocturnal`, `ai.kryden.agentcall`.
 
 If you fork this app and build it under your own Apple/Google developer account, change both identifiers to a namespace you control, for example:
 
