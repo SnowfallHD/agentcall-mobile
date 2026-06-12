@@ -30,7 +30,17 @@ type TokenResponse = {
   serverUrl?: string;
   url?: string;
   room?: string;
+  identity?: string;
 };
+
+type StoredSettings = {
+  liveKitUrl?: string;
+  tokenEndpoint?: string;
+  roomName?: string;
+  identity?: string;
+};
+
+type Status = 'idle' | 'testing-token' | 'fetching-token' | 'connecting' | 'connected' | 'error';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as AppExtra;
 
@@ -39,12 +49,9 @@ const initialTokenEndpoint = extra.tokenEndpoint ?? '';
 const initialRoom = extra.defaultRoom ?? 'agentcall-demo';
 const SETTINGS_STORAGE_KEY = 'agentcall.connection-settings.v1';
 
-type StoredSettings = {
-  liveKitUrl?: string;
-  tokenEndpoint?: string;
-  roomName?: string;
-  identity?: string;
-};
+function randomIdentity(): string {
+  return `mobile-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function buildTokenUrl(endpoint: string, room: string, identity: string): string {
   const url = new URL(endpoint);
@@ -58,17 +65,45 @@ function userMessageFromError(error: unknown): string {
   return String(error);
 }
 
+function isLiveKitUrl(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith('wss://') || trimmed.startsWith('ws://');
+}
+
+function isHttpUrl(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith('https://') || trimmed.startsWith('http://');
+}
+
+function parseTokenResponse(body: TokenResponse, fallbackUrl: string) {
+  const token = body.token ?? body.accessToken ?? '';
+  const liveKitUrl = body.livekitUrl ?? body.serverUrl ?? body.url ?? fallbackUrl;
+  return { token, liveKitUrl };
+}
+
+function checklistIcon(ok: boolean): string {
+  return ok ? '✓' : '•';
+}
+
 export default function App() {
   const [liveKitUrl, setLiveKitUrl] = useState(initialLiveKitUrl);
   const [tokenEndpoint, setTokenEndpoint] = useState(initialTokenEndpoint);
   const [roomName, setRoomName] = useState(initialRoom);
-  const [identity, setIdentity] = useState(`mobile-${Math.random().toString(36).slice(2, 8)}`);
+  const [identity, setIdentity] = useState(randomIdentity());
   const [manualToken, setManualToken] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [activeUrl, setActiveUrl] = useState<string>();
   const [activeToken, setActiveToken] = useState<string>();
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'fetching-token' | 'connecting' | 'connected' | 'error'>('idle');
-  const [message, setMessage] = useState('Paste a LiveKit URL and token endpoint, then connect.');
+  const [status, setStatus] = useState<Status>('idle');
+  const [message, setMessage] = useState('Add your LiveKit URL, token endpoint, and room. Then test or connect.');
+
+  const hasLiveKitUrl = isLiveKitUrl(liveKitUrl);
+  const hasTokenEndpoint = isHttpUrl(tokenEndpoint);
+  const hasRoom = roomName.trim().length > 0;
+  const hasIdentity = identity.trim().length > 0;
+  const hasManualToken = manualToken.trim().length > 0;
+  const hasTokenSource = hasManualToken || hasTokenEndpoint;
 
   useEffect(() => {
     let mounted = true;
@@ -110,40 +145,73 @@ export default function App() {
   }, [identity, liveKitUrl, roomName, settingsLoaded, tokenEndpoint]);
 
   const canConnect = useMemo(() => {
-    const hasUrl = liveKitUrl.trim().startsWith('wss://') || liveKitUrl.trim().startsWith('ws://');
-    const hasTokenSource = manualToken.trim().length > 0 || tokenEndpoint.trim().startsWith('http');
-    return hasUrl && hasTokenSource && roomName.trim().length > 0 && identity.trim().length > 0;
-  }, [identity, liveKitUrl, manualToken, roomName, tokenEndpoint]);
+    return hasLiveKitUrl && hasTokenSource && hasRoom && hasIdentity;
+  }, [hasIdentity, hasLiveKitUrl, hasRoom, hasTokenSource]);
+
+  const connected = status === 'connected' || status === 'connecting';
+  const busy = status === 'testing-token' || status === 'fetching-token' || status === 'connecting';
+
+  async function fetchToken(): Promise<{ token: string; liveKitUrl: string }> {
+    let token = manualToken.trim();
+    let resolvedUrl = liveKitUrl.trim();
+
+    if (!token) {
+      if (!hasTokenEndpoint) throw new Error('Add a token endpoint that starts with http:// or https://.');
+      const response = await fetch(buildTokenUrl(tokenEndpoint.trim(), roomName.trim(), identity.trim()));
+      if (!response.ok) {
+        throw new Error(`Token endpoint returned HTTP ${response.status}.`);
+      }
+      const body = (await response.json()) as TokenResponse;
+      const parsed = parseTokenResponse(body, resolvedUrl);
+      token = parsed.token;
+      resolvedUrl = parsed.liveKitUrl;
+    }
+
+    if (!token) throw new Error('Token response did not include token or accessToken.');
+    if (!isLiveKitUrl(resolvedUrl)) throw new Error('Missing LiveKit URL. Use wss://your-project.livekit.cloud.');
+
+    return { token, liveKitUrl: resolvedUrl };
+  }
+
+  async function testTokenEndpoint() {
+    if (!hasTokenEndpoint || !hasRoom || !hasIdentity) {
+      setStatus('error');
+      setMessage('To test, add a token endpoint, room, and identity.');
+      return;
+    }
+
+    setStatus('testing-token');
+    setMessage('Testing token endpoint…');
+
+    try {
+      const response = await fetch(buildTokenUrl(tokenEndpoint.trim(), roomName.trim(), identity.trim()));
+      if (!response.ok) throw new Error(`Token endpoint returned HTTP ${response.status}.`);
+      const body = (await response.json()) as TokenResponse;
+      const parsed = parseTokenResponse(body, liveKitUrl.trim());
+      if (!parsed.token) throw new Error('Token endpoint responded, but no token/accessToken was present.');
+      if (!isLiveKitUrl(parsed.liveKitUrl)) throw new Error('Token endpoint responded, but no valid wss:// LiveKit URL was available.');
+      setStatus('idle');
+      setMessage(`Token endpoint works for room “${roomName.trim()}”. You can connect now.`);
+    } catch (error) {
+      setStatus('error');
+      setMessage(userMessageFromError(error));
+    }
+  }
 
   async function connect() {
     if (!canConnect) {
       setStatus('error');
-      setMessage('Add a wss:// LiveKit URL plus either a token endpoint or a pasted token.');
+      setMessage('Finish the setup checklist: LiveKit URL, token source, room, and identity.');
       return;
     }
 
     setStatus('fetching-token');
-    setMessage('Getting room token…');
+    setMessage(hasManualToken ? 'Using pasted short-lived token…' : 'Getting room token…');
 
     try {
-      let token = manualToken.trim();
-      let resolvedUrl = liveKitUrl.trim();
-
-      if (!token) {
-        const response = await fetch(buildTokenUrl(tokenEndpoint.trim(), roomName.trim(), identity.trim()));
-        if (!response.ok) {
-          throw new Error(`Token endpoint returned ${response.status}`);
-        }
-        const body = (await response.json()) as TokenResponse;
-        token = body.token ?? body.accessToken ?? '';
-        resolvedUrl = body.livekitUrl ?? body.serverUrl ?? body.url ?? resolvedUrl;
-      }
-
-      if (!token) throw new Error('Token response did not include token or accessToken.');
-      if (!resolvedUrl) throw new Error('Missing LiveKit server URL.');
-
-      setActiveToken(token);
-      setActiveUrl(resolvedUrl);
+      const result = await fetchToken();
+      setActiveToken(result.token);
+      setActiveUrl(result.liveKitUrl);
       setStatus('connecting');
       setMessage(`Joining ${roomName.trim()} as ${identity.trim()}…`);
     } catch (error) {
@@ -161,7 +229,18 @@ export default function App() {
     setMessage('Disconnected.');
   }
 
-  const connected = status === 'connected' || status === 'connecting';
+  function clearSettings() {
+    setLiveKitUrl(initialLiveKitUrl);
+    setTokenEndpoint(initialTokenEndpoint);
+    setRoomName(initialRoom);
+    setIdentity(randomIdentity());
+    setManualToken('');
+    setActiveToken(undefined);
+    setActiveUrl(undefined);
+    setStatus('idle');
+    setMessage('Settings reset. Paste your connection details to start again.');
+    AsyncStorage.removeItem(SETTINGS_STORAGE_KEY).catch(() => undefined);
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -176,135 +255,216 @@ export default function App() {
                 </View>
                 <Text style={styles.eyebrow}>AgentCall Mobile</Text>
               </View>
-              <Text style={styles.title}>A polished phone line for your AI agent.</Text>
+              <Text style={styles.title}>Connect your phone to any LiveKit agent.</Text>
               <Text style={styles.subtitle}>
-                Generic Expo + LiveKit starter. Bring your own token endpoint, agent worker, and room policy.
+                Paste three things: LiveKit URL, token endpoint, and room. Your agent worker joins the same room.
               </Text>
             </View>
 
-          <View style={styles.card}>
-            <Text style={styles.label}>LiveKit URL</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!connected}
-              onChangeText={setLiveKitUrl}
-              placeholder="wss://your-project.livekit.cloud"
-              placeholderTextColor="#728097"
-              style={styles.input}
-              value={liveKitUrl}
-            />
+            <View style={styles.setupCard}>
+              <Text style={styles.cardTitle}>Setup checklist</Text>
+              <View style={styles.checkRow}>
+                <Text style={[styles.checkIcon, hasLiveKitUrl ? styles.checkOk : undefined]}>{checklistIcon(hasLiveKitUrl)}</Text>
+                <Text style={styles.checkText}>LiveKit URL starts with wss://</Text>
+              </View>
+              <View style={styles.checkRow}>
+                <Text style={[styles.checkIcon, hasTokenSource ? styles.checkOk : undefined]}>{checklistIcon(hasTokenSource)}</Text>
+                <Text style={styles.checkText}>Token endpoint works, or a direct test token is pasted</Text>
+              </View>
+              <View style={styles.checkRow}>
+                <Text style={[styles.checkIcon, hasRoom ? styles.checkOk : undefined]}>{checklistIcon(hasRoom)}</Text>
+                <Text style={styles.checkText}>Room matches the agent worker room</Text>
+              </View>
+              <View style={styles.checkRow}>
+                <Text style={[styles.checkIcon, hasIdentity ? styles.checkOk : undefined]}>{checklistIcon(hasIdentity)}</Text>
+                <Text style={styles.checkText}>Identity is unique for this phone</Text>
+              </View>
+            </View>
 
-            <Text style={styles.label}>Token endpoint</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!connected && manualToken.length === 0}
-              onChangeText={setTokenEndpoint}
-              placeholder="https://your-server.example.com/token"
-              placeholderTextColor="#728097"
-              style={styles.input}
-              value={tokenEndpoint}
-            />
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Connection</Text>
 
-            <View style={styles.row}>
-              <View style={styles.half}>
-                <Text style={styles.label}>Room</Text>
+              <FieldHelp label="1. LiveKit URL" help="From LiveKit Cloud or your self-hosted server. Safe to store in the app.">
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
                   editable={!connected}
-                  onChangeText={setRoomName}
-                  placeholder="agent-room"
+                  keyboardType="url"
+                  onChangeText={setLiveKitUrl}
+                  placeholder="wss://your-project.livekit.cloud"
                   placeholderTextColor="#728097"
-                  style={styles.input}
-                  value={roomName}
+                  style={[styles.input, liveKitUrl.length > 0 && !hasLiveKitUrl ? styles.inputError : undefined]}
+                  value={liveKitUrl}
                 />
-              </View>
-              <View style={styles.half}>
-                <Text style={styles.label}>Identity</Text>
+              </FieldHelp>
+
+              <FieldHelp label="2. Token endpoint" help="Your backend endpoint. It returns a short-lived room token; API secret stays server-side.">
                 <TextInput
                   autoCapitalize="none"
                   autoCorrect={false}
-                  editable={!connected}
-                  onChangeText={setIdentity}
-                  placeholder="mobile-user"
+                  editable={!connected && !hasManualToken}
+                  keyboardType="url"
+                  onChangeText={setTokenEndpoint}
+                  placeholder="https://your-api.example.com/token"
                   placeholderTextColor="#728097"
-                  style={styles.input}
-                  value={identity}
+                  style={[styles.input, tokenEndpoint.length > 0 && !hasTokenEndpoint ? styles.inputError : undefined]}
+                  value={tokenEndpoint}
                 />
+                <Text style={styles.microcopy}>Called as: /token?room={roomName || '<room>'}&identity={identity || '<identity>'}</Text>
+              </FieldHelp>
+
+              <View style={styles.row}>
+                <View style={styles.half}>
+                  <FieldHelp label="3. Room" help="Phone and agent worker must use the same room.">
+                    <TextInput
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!connected}
+                      onChangeText={setRoomName}
+                      placeholder="agentcall-demo"
+                      placeholderTextColor="#728097"
+                      style={styles.input}
+                      value={roomName}
+                    />
+                  </FieldHelp>
+                </View>
+                <View style={styles.half}>
+                  <FieldHelp label="4. Identity" help="A unique name for this phone participant.">
+                    <View style={styles.identityRow}>
+                      <TextInput
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        editable={!connected}
+                        onChangeText={setIdentity}
+                        placeholder="mobile-user"
+                        placeholderTextColor="#728097"
+                        style={[styles.input, styles.identityInput]}
+                        value={identity}
+                      />
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={connected}
+                        onPress={() => setIdentity(randomIdentity())}
+                        style={({ pressed }) => [styles.smallButton, connected || pressed ? styles.buttonDim : undefined]}
+                      >
+                        <Text style={styles.smallButtonText}>↻</Text>
+                      </Pressable>
+                    </View>
+                  </FieldHelp>
+                </View>
               </View>
+
+              <Pressable accessibilityRole="button" onPress={() => setShowAdvanced((value) => !value)} style={styles.advancedToggle}>
+                <Text style={styles.advancedToggleText}>{showAdvanced ? 'Hide advanced token test' : 'Advanced: paste direct token'}</Text>
+              </Pressable>
+
+              {showAdvanced ? (
+                <FieldHelp label="Optional direct token" help="For quick tests only. Tokens are not saved on device.">
+                  <TextInput
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!connected}
+                    multiline
+                    onChangeText={setManualToken}
+                    placeholder="Paste a short-lived LiveKit participant token"
+                    placeholderTextColor="#728097"
+                    style={[styles.input, styles.tokenInput]}
+                    value={manualToken}
+                  />
+                </FieldHelp>
+              ) : null}
+
+              <View style={styles.actionRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={busy || connected || !hasTokenEndpoint || hasManualToken}
+                  onPress={testTokenEndpoint}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    (busy || connected || !hasTokenEndpoint || hasManualToken || pressed) ? styles.buttonDim : undefined,
+                  ]}
+                >
+                  <Text style={styles.secondaryButtonText}>Test endpoint</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!canConnect && !connected}
+                  onPress={connected ? disconnect : connect}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    connected ? styles.disconnectButton : styles.connectButton,
+                    ((!canConnect && !connected) || pressed) ? styles.buttonDim : undefined,
+                  ]}
+                >
+                  <Text style={styles.buttonText}>{connected ? 'Disconnect' : 'Connect voice'}</Text>
+                </Pressable>
+              </View>
+
+              <Pressable accessibilityRole="button" disabled={connected} onPress={clearSettings} style={styles.clearButton}>
+                <Text style={styles.clearButtonText}>Reset saved settings</Text>
+              </Pressable>
             </View>
 
-            <Text style={styles.label}>Optional direct token</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={!connected}
-              multiline
-              onChangeText={setManualToken}
-              placeholder="Paste a short-lived LiveKit token for quick tests"
-              placeholderTextColor="#728097"
-              style={[styles.input, styles.tokenInput]}
-              value={manualToken}
-            />
-
-            <Pressable
-              accessibilityRole="button"
-              disabled={!canConnect && !connected}
-              onPress={connected ? disconnect : connect}
-              style={({ pressed }) => [
-                styles.button,
-                connected ? styles.disconnectButton : styles.connectButton,
-                (!canConnect && !connected) || pressed ? styles.buttonDim : undefined,
-              ]}
-            >
-              <Text style={styles.buttonText}>{connected ? 'Disconnect' : 'Connect voice'}</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.statusCard}>
-            <View style={styles.statusHeader}>
-              <Text style={styles.statusLabel}>Status</Text>
-              {(status === 'fetching-token' || status === 'connecting') && <ActivityIndicator color="#7dd3fc" />}
-            </View>
-            <Text style={[styles.statusText, status === 'error' ? styles.errorText : undefined]}>{message}</Text>
-            <Text style={styles.hint}>
-              The app publishes microphone audio only. The LiveKit agent in the room owns STT, fast acks, TTS,
-              interruptions, tools, and session continuity.
-            </Text>
-          </View>
-
-          {activeUrl && activeToken ? (
-            <LiveKitRoom
-              audio
-              video={false}
-              connect
-              serverUrl={activeUrl}
-              token={activeToken}
-              onConnected={() => {
-                setStatus('connected');
-                setMessage(`Connected to ${roomName.trim()}. Start talking.`);
-              }}
-              onDisconnected={() => {
-                setStatus('idle');
-                setMessage('Room disconnected.');
-              }}
-              onError={(error) => {
-                setStatus('error');
-                setMessage(error.message);
-              }}
-            >
-              <View style={styles.livePanel}>
-                <Text style={styles.liveDot}>●</Text>
-                <Text style={styles.liveText}>LiveKit room active</Text>
+            <View style={styles.statusCard}>
+              <View style={styles.statusHeader}>
+                <Text style={styles.statusLabel}>Status</Text>
+                {busy && <ActivityIndicator color="#7dd3fc" />}
               </View>
-            </LiveKitRoom>
-          ) : null}
+              <Text style={[styles.statusText, status === 'error' ? styles.errorText : undefined]}>{message}</Text>
+              <Text style={styles.hint}>
+                The app publishes microphone audio only. Your LiveKit agent owns STT, fast acknowledgements, TTS,
+                interruptions, tools, and session continuity.
+              </Text>
+            </View>
+
+            <View style={styles.howItWorksCard}>
+              <Text style={styles.cardTitle}>How it connects</Text>
+              <Text style={styles.flowText}>Phone → token endpoint → LiveKit room ← agent worker</Text>
+              <Text style={styles.hint}>
+                If you hear silence after connecting, the phone probably joined successfully but no agent worker is active in that room.
+              </Text>
+            </View>
+
+            {activeUrl && activeToken ? (
+              <LiveKitRoom
+                audio
+                video={false}
+                connect
+                serverUrl={activeUrl}
+                token={activeToken}
+                onConnected={() => {
+                  setStatus('connected');
+                  setMessage(`Connected to ${roomName.trim()}. Start talking.`);
+                }}
+                onDisconnected={() => {
+                  setStatus('idle');
+                  setMessage('Room disconnected.');
+                }}
+                onError={(error) => {
+                  setStatus('error');
+                  setMessage(error.message);
+                }}
+              >
+                <View style={styles.livePanel}>
+                  <Text style={styles.liveDot}>●</Text>
+                  <Text style={styles.liveText}>LiveKit room active</Text>
+                </View>
+              </LiveKitRoom>
+            ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
     </SafeAreaView>
+  );
+}
+
+function FieldHelp({ children, help, label }: { children: React.ReactNode; help: string; label: string }) {
+  return (
+    <View style={styles.fieldBlock}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.fieldHelp}>{help}</Text>
+      {children}
+    </View>
   );
 }
 
@@ -359,29 +519,55 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#f8fafc',
-    fontSize: 34,
+    fontSize: 33,
     fontWeight: '800',
     letterSpacing: -1,
-    lineHeight: 39,
+    lineHeight: 38,
   },
   subtitle: {
     color: '#b6c2d2',
     fontSize: 16,
     lineHeight: 23,
   },
-  card: {
-    backgroundColor: '#101b2d',
-    borderColor: '#20304a',
+  setupCard: {
+    backgroundColor: 'rgba(14, 165, 233, 0.10)',
+    borderColor: 'rgba(125, 211, 252, 0.32)',
     borderRadius: 24,
     borderWidth: 1,
     gap: 10,
     padding: 18,
   },
+  card: {
+    backgroundColor: '#101b2d',
+    borderColor: '#20304a',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 14,
+    padding: 18,
+  },
+  cardTitle: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  fieldBlock: {
+    gap: 7,
+  },
   label: {
     color: '#d9e7f7',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     marginTop: 4,
+  },
+  fieldHelp: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  microcopy: {
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 15,
   },
   input: {
     backgroundColor: '#08111f',
@@ -394,8 +580,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
+  inputError: {
+    borderColor: '#fb7185',
+  },
   tokenInput: {
-    minHeight: 78,
+    minHeight: 88,
     textAlignVertical: 'top',
   },
   row: {
@@ -404,12 +593,57 @@ const styles = StyleSheet.create({
   },
   half: {
     flex: 1,
-    gap: 10,
   },
-  button: {
+  identityRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  identityInput: {
+    flex: 1,
+  },
+  smallButton: {
+    alignItems: 'center',
+    backgroundColor: '#17233a',
+    borderColor: '#30435f',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  smallButtonText: {
+    color: '#dbeafe',
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  advancedToggle: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+  },
+  advancedToggleText: {
+    color: '#7dd3fc',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  primaryButton: {
     alignItems: 'center',
     borderRadius: 16,
-    marginTop: 8,
+    flex: 1.1,
+    paddingVertical: 15,
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#17233a',
+    borderColor: '#30435f',
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 0.9,
     paddingVertical: 15,
   },
   connectButton: {
@@ -425,6 +659,40 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '800',
+  },
+  secondaryButtonText: {
+    color: '#e0f2fe',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  clearButton: {
+    alignSelf: 'center',
+    paddingVertical: 4,
+  },
+  clearButtonText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  checkRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  checkIcon: {
+    color: '#64748b',
+    fontSize: 16,
+    fontWeight: '900',
+    width: 18,
+  },
+  checkOk: {
+    color: '#22c55e',
+  },
+  checkText: {
+    color: '#dbeafe',
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   statusCard: {
     backgroundColor: '#0d1728',
@@ -458,6 +726,20 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 13,
     lineHeight: 19,
+  },
+  howItWorksCard: {
+    backgroundColor: '#08111f',
+    borderColor: '#20304a',
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 10,
+    padding: 18,
+  },
+  flowText: {
+    color: '#e0f2fe',
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 22,
   },
   livePanel: {
     alignItems: 'center',

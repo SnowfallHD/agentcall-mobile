@@ -16,6 +16,9 @@ AgentCall is a small React Native app that lets a phone join a LiveKit room, pub
   - participant identity
   - optional direct short-lived token for quick tests
 - Remembers non-secret connection settings on device between launches
+- Guided setup checklist with inline validation
+- Token endpoint test button before joining the room
+- Clear distinction between normal token-endpoint flow and advanced direct-token testing
 
 ## What this is not
 
