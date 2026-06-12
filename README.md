@@ -56,6 +56,24 @@ Useful docs in this repo:
 - [Connect an agent](docs/connect-agent.md)
 - [Node token server example](examples/node-token-server/README.md)
 
+## App identifiers and forks
+
+The official SnowfallHD build uses:
+
+```text
+ios.bundleIdentifier: com.snowfallhd.agentcall
+android.package:       com.snowfallhd.agentcall
+```
+
+If you fork this app and build it under your own Apple/Google developer account, change both identifiers to a namespace you control, for example:
+
+```text
+ios.bundleIdentifier: com.yourcompany.agentcall
+android.package:       com.yourcompany.agentcall
+```
+
+Apple bundle identifiers are globally unique inside Apple's signing/app ecosystem. A public open-source repo can ship a default identifier, but third-party forks should not expect to publish or sign using the official SnowfallHD identifier.
+
 ## Configure defaults
 
 Defaults in `app.json` are intentionally blank. You can either paste settings in the app UI or set values before bundling/building:
