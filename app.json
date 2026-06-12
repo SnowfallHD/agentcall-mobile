@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "description": "A generic mobile voice client for LiveKit-powered AI agents.",
-    "githubUrl": "https://github.com/KrydenAI/agentcall-mobile",
+    "githubUrl": "https://github.com/SnowfallHD/agentcall-mobile",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.agentcall.mobile"
