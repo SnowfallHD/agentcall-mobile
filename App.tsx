@@ -1,8 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LiveKitRoom } from '@livekit/react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -36,6 +37,14 @@ const extra = (Constants.expoConfig?.extra ?? {}) as AppExtra;
 const initialLiveKitUrl = extra.livekitUrl ?? '';
 const initialTokenEndpoint = extra.tokenEndpoint ?? '';
 const initialRoom = extra.defaultRoom ?? 'agentcall-demo';
+const SETTINGS_STORAGE_KEY = 'agentcall.connection-settings.v1';
+
+type StoredSettings = {
+  liveKitUrl?: string;
+  tokenEndpoint?: string;
+  roomName?: string;
+  identity?: string;
+};
 
 function buildTokenUrl(endpoint: string, room: string, identity: string): string {
   const url = new URL(endpoint);
@@ -57,8 +66,48 @@ export default function App() {
   const [manualToken, setManualToken] = useState('');
   const [activeUrl, setActiveUrl] = useState<string>();
   const [activeToken, setActiveToken] = useState<string>();
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [status, setStatus] = useState<'idle' | 'fetching-token' | 'connecting' | 'connected' | 'error'>('idle');
   const [message, setMessage] = useState('Paste a LiveKit URL and token endpoint, then connect.');
+
+  useEffect(() => {
+    let mounted = true;
+
+    AsyncStorage.getItem(SETTINGS_STORAGE_KEY)
+      .then((raw) => {
+        if (!mounted || !raw) return;
+        const settings = JSON.parse(raw) as StoredSettings;
+        if (settings.liveKitUrl) setLiveKitUrl(settings.liveKitUrl);
+        if (settings.tokenEndpoint) setTokenEndpoint(settings.tokenEndpoint);
+        if (settings.roomName) setRoomName(settings.roomName);
+        if (settings.identity) setIdentity(settings.identity);
+      })
+      .catch(() => {
+        // Settings are convenience only; connection should still work if storage fails.
+      })
+      .finally(() => {
+        if (mounted) setSettingsLoaded(true);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!settingsLoaded) return;
+
+    const settings: StoredSettings = {
+      liveKitUrl,
+      tokenEndpoint,
+      roomName,
+      identity,
+    };
+
+    AsyncStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings)).catch(() => {
+      // Non-fatal: users can still paste settings next launch.
+    });
+  }, [identity, liveKitUrl, roomName, settingsLoaded, tokenEndpoint]);
 
   const canConnect = useMemo(() => {
     const hasUrl = liveKitUrl.trim().startsWith('wss://') || liveKitUrl.trim().startsWith('ws://');

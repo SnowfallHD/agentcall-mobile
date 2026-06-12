@@ -15,6 +15,7 @@ AgentCall is a small React Native app that lets a phone join a LiveKit room, pub
   - room name
   - participant identity
   - optional direct short-lived token for quick tests
+- Remembers non-secret connection settings on device between launches
 
 ## What this is not
 
@@ -46,6 +47,11 @@ Accepted aliases:
 - `livekitUrl`, `serverUrl`, or `url`
 
 The token endpoint should live on your backend so your LiveKit API secret never ships to the phone.
+
+Useful docs in this repo:
+
+- [Connect an agent](docs/connect-agent.md)
+- [Node token server example](examples/node-token-server/README.md)
 
 ## Configure defaults
 
