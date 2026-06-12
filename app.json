@@ -1,17 +1,22 @@
 {
   "expo": {
-    "name": "hermes-voice-mobile",
-    "slug": "hermes-voice-mobile",
+    "name": "AgentCall",
+    "slug": "agentcall-mobile",
+    "scheme": "agentcall",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "description": "A generic mobile voice client for LiveKit-powered AI agents.",
+    "githubUrl": "https://github.com/KrydenAI/agentcall-mobile",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.agentcall.mobile"
     },
     "android": {
+      "package": "dev.agentcall.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#08111F",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -20,6 +25,22 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication"
+          }
+        }
+      ],
+      "@config-plugins/react-native-webrtc"
+    ],
+    "extra": {
+      "livekitUrl": "",
+      "tokenEndpoint": "",
+      "defaultRoom": "agentcall-demo"
     }
   }
 }

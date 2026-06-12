@@ -1,8 +1,9 @@
 import { registerRootComponent } from 'expo';
+import { registerGlobals } from '@livekit/react-native';
 
 import App from './App';
 
-// registerRootComponent calls AppRegistry.registerComponent('main', () => App);
-// It also ensures that whether you load the app in Expo Go or in a native build,
-// the environment is set up appropriately
+// LiveKit React Native requires WebRTC globals before any room/client usage.
+registerGlobals();
+
 registerRootComponent(App);
