@@ -100,6 +100,8 @@ export default function App() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState('Add your LiveKit URL, token endpoint, and room. Then test or connect.');
+  const [muted, setMuted] = useState(false);
+  const [speakerOn, setSpeakerOn] = useState(true);
 
   const hasLiveKitUrl = isLiveKitUrl(liveKitUrl);
   const hasTokenEndpoint = isHttpUrl(tokenEndpoint);
@@ -253,45 +255,110 @@ export default function App() {
   }
 
   if (activeUrl && activeToken) {
+    const roomLabel = roomName.trim();
+    const identityLabel = identity.trim();
+    const connectedLabel = status === 'connected' ? 'Connected' : status === 'error' ? 'Needs attention' : 'Joining';
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="light" />
-        <LinearGradient colors={["#050b16", "#0b1730", "#07111f"]} style={styles.gradient}>
-          <View style={styles.roomContainer}>
-            <View style={styles.roomHeader}>
-              <Text style={styles.eyebrow}>AgentCall Room</Text>
-              <Text style={styles.roomTitle}>{roomName.trim()}</Text>
-              <Text style={styles.roomMeta}>Joined as {identity.trim()}</Text>
-            </View>
+        <LinearGradient colors={["#020713", "#071225", "#050917"]} style={styles.gradient}>
+          <LiveKitRoom
+            audio={!muted}
+            video={false}
+            connect
+            serverUrl={activeUrl}
+            token={activeToken}
+            onConnected={() => {
+              setStatus('connected');
+              setMessage(`Connected to ${roomLabel}. Start talking.`);
+            }}
+            onDisconnected={handleRoomDisconnected}
+            onError={(error) => {
+              setStatus('error');
+              setMessage(error.message);
+            }}
+          >
+            <View style={styles.callScreen}>
+              <View style={styles.callTopBar}>
+                <View style={styles.agentIdentityRow}>
+                  <View style={styles.agentMark}>
+                    <Text style={styles.agentMarkText}>✦</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.callAgentName}>Hermes Voice</Text>
+                    <View style={styles.callStatusRow}>
+                      <View style={[styles.presenceDot, status === 'error' ? styles.presenceError : undefined]} />
+                      <Text style={styles.callStatusText}>{connectedLabel}</Text>
+                    </View>
+                  </View>
+                </View>
 
-            <LiveKitRoom
-              audio
-              video={false}
-              connect
-              serverUrl={activeUrl}
-              token={activeToken}
-              onConnected={() => {
-                setStatus('connected');
-                setMessage(`Connected to ${roomName.trim()}. Start talking.`);
-              }}
-              onDisconnected={handleRoomDisconnected}
-              onError={(error) => {
-                setStatus('error');
-                setMessage(error.message);
-              }}
-            >
-              <View style={styles.roomCard}>
-                <Text style={styles.liveDot}>●</Text>
-                <Text style={styles.roomStatusTitle}>{status === 'connected' ? 'Voice room live' : 'Joining voice room…'}</Text>
-                <Text style={[styles.statusText, status === 'error' ? styles.errorText : undefined]}>{message}</Text>
-                <Text style={styles.hint}>Talk naturally. The agent worker is dispatched by your token endpoint and listens in this same LiveKit room.</Text>
+                <Pressable accessibilityRole="button" onPress={() => setShowAdvanced((value) => !value)} style={styles.callIconButton}>
+                  <Text style={styles.callIconText}>☰</Text>
+                </Pressable>
               </View>
-            </LiveKitRoom>
 
-            <Pressable accessibilityRole="button" onPress={disconnect} style={[styles.primaryButton, styles.disconnectButton, styles.roomDisconnectButton]}>
-              <Text style={styles.buttonText}>Leave room</Text>
-            </Pressable>
-          </View>
+              {showAdvanced ? (
+                <View style={styles.callSessionPanel}>
+                  <View style={styles.sessionPillRow}>
+                    <View style={styles.sessionPillActive}>
+                      <Text style={styles.sessionPillActiveText}>Continue session</Text>
+                    </View>
+                    <View style={styles.sessionPill}>
+                      <Text style={styles.sessionPillText}>New session soon</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.sessionPanelText}>Room {roomLabel} maps to a durable Hermes session on the sidecar. Passive voice summaries save context; active work still requires an explicit handoff.</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.callHero}>
+                <View style={styles.orbOuterGlow}>
+                  <View style={styles.orbShell}>
+                    <LinearGradient colors={["rgba(172,184,255,0.96)", "rgba(90,116,245,0.44)", "rgba(51,66,143,0.12)"]} start={{ x: 0.16, y: 0.04 }} end={{ x: 0.92, y: 1 }} style={styles.orbGradient}>
+                      <View style={styles.orbHighlight} />
+                      <View style={styles.orbRibbon} />
+                    </LinearGradient>
+                  </View>
+                </View>
+
+                <View style={styles.callCaptionCard}>
+                  <Text style={styles.callCaptionTitle}>{status === 'connected' ? 'Listening naturally' : 'Preparing the room'}</Text>
+                  <Text style={[styles.callCaption, status === 'error' ? styles.errorText : undefined]}>{message}</Text>
+                </View>
+              </View>
+
+              <View style={styles.sessionMetaBar}>
+                <View style={styles.sessionMetaItem}>
+                  <Text style={styles.sessionMetaLabel}>Session</Text>
+                  <Text numberOfLines={1} style={styles.sessionMetaValue}>{roomLabel}</Text>
+                </View>
+                <View style={styles.sessionMetaDivider} />
+                <View style={styles.sessionMetaItem}>
+                  <Text style={styles.sessionMetaLabel}>Identity</Text>
+                  <Text numberOfLines={1} style={styles.sessionMetaValue}>{identityLabel}</Text>
+                </View>
+              </View>
+
+              <View style={styles.callControls}>
+                <Pressable accessibilityRole="button" onPress={() => setMuted((value) => !value)} style={[styles.callControlButton, muted ? styles.callControlActive : undefined]}>
+                  <Text style={styles.callControlIcon}>{muted ? '⌁' : '🎙'}</Text>
+                  <Text style={styles.callControlLabel}>{muted ? 'Muted' : 'Mute'}</Text>
+                </Pressable>
+
+                <Pressable accessibilityRole="button" onPress={() => setSpeakerOn((value) => !value)} style={[styles.callControlButton, speakerOn ? undefined : styles.callControlActive]}>
+                  <Text style={styles.callControlIcon}>{speakerOn ? '◖' : '◔'}</Text>
+                  <Text style={styles.callControlLabel}>{speakerOn ? 'Speaker' : 'Quiet'}</Text>
+                </Pressable>
+
+                <Pressable accessibilityRole="button" onPress={disconnect} style={[styles.callControlButton, styles.endCallButton]}>
+                  <Text style={styles.endCallIcon}>⌒</Text>
+                  <Text style={[styles.callControlLabel, styles.endCallLabel]}>End</Text>
+                </Pressable>
+              </View>
+            </View>
+          </LiveKitRoom>
         </LinearGradient>
       </SafeAreaView>
     );
@@ -544,42 +611,279 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 16,
   },
-  roomContainer: {
+  callScreen: {
     flex: 1,
-    gap: 22,
-    justifyContent: 'center',
-    padding: 24,
+    justifyContent: 'space-between',
+    paddingHorizontal: 28,
+    paddingBottom: 30,
+    paddingTop: 20,
   },
-  roomHeader: {
-    gap: 8,
-  },
-  roomTitle: {
-    color: '#f8fafc',
-    fontSize: 30,
-    fontWeight: '900',
-    letterSpacing: -0.6,
-  },
-  roomMeta: {
-    color: '#94a3b8',
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  roomCard: {
+  callTopBar: {
     alignItems: 'center',
-    backgroundColor: '#0d1728',
-    borderColor: '#0ea5e9',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  agentIdentityRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  agentMark: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(122, 137, 255, 0.14)',
+    borderColor: 'rgba(170, 183, 255, 0.22)',
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: 'center',
+    shadowColor: '#8792ff',
+    shadowOpacity: 0.7,
+    shadowRadius: 20,
+    width: 46,
+  },
+  agentMarkText: {
+    color: '#9ba7ff',
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 32,
+  },
+  callAgentName: {
+    color: '#f8fafc',
+    fontSize: 23,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  callStatusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+    marginTop: 3,
+  },
+  presenceDot: {
+    backgroundColor: '#6d7dff',
+    borderRadius: 4,
+    height: 8,
+    width: 8,
+  },
+  presenceError: {
+    backgroundColor: '#fb7185',
+  },
+  callStatusText: {
+    color: '#aab5c8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  callIconButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderColor: 'rgba(255,255,255,0.10)',
     borderRadius: 28,
     borderWidth: 1,
-    gap: 14,
-    padding: 24,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
   },
-  roomStatusTitle: {
-    color: '#e0f2fe',
-    fontSize: 22,
+  callIconText: {
+    color: '#dbe7ff',
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  callSessionPanel: {
+    backgroundColor: 'rgba(10, 18, 36, 0.74)',
+    borderColor: 'rgba(126, 148, 255, 0.22)',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 12,
+    padding: 16,
+  },
+  sessionPillRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sessionPillActive: {
+    backgroundColor: 'rgba(125, 145, 255, 0.20)',
+    borderColor: 'rgba(154, 169, 255, 0.35)',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  sessionPillActiveText: {
+    color: '#e8edff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sessionPill: {
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  sessionPillText: {
+    color: '#8d98ad',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sessionPanelText: {
+    color: '#aab5c8',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  callHero: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    gap: 28,
+  },
+  orbOuterGlow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#6676ff',
+    shadowOpacity: 0.72,
+    shadowRadius: 52,
+  },
+  orbShell: {
+    alignItems: 'center',
+    borderRadius: 126,
+    height: 252,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#9ca8ff',
+    shadowOpacity: 0.42,
+    shadowRadius: 36,
+    width: 252,
+  },
+  orbGradient: {
+    alignItems: 'center',
+    borderRadius: 126,
+    height: 252,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 252,
+  },
+  orbHighlight: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    borderRadius: 90,
+    height: 116,
+    position: 'absolute',
+    right: 18,
+    top: 24,
+    transform: [{ rotate: '-18deg' }],
+    width: 172,
+  },
+  orbRibbon: {
+    backgroundColor: 'rgba(18, 28, 73, 0.30)',
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 72,
+    borderWidth: 1,
+    height: 122,
+    position: 'absolute',
+    top: 92,
+    transform: [{ rotate: '-28deg' }],
+    width: 292,
+  },
+  callCaptionCard: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(8, 16, 33, 0.58)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 22,
+    borderWidth: 1,
+    maxWidth: 330,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  callCaptionTitle: {
+    color: '#f8fafc',
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 5,
+  },
+  callCaption: {
+    color: '#aeb9ca',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  sessionMetaBar: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.045)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: 'row',
+    marginBottom: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  sessionMetaItem: {
+    flex: 1,
+    gap: 3,
+  },
+  sessionMetaDivider: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    height: 30,
+    marginHorizontal: 12,
+    width: 1,
+  },
+  sessionMetaLabel: {
+    color: '#718097',
+    fontSize: 10,
     fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
-  roomDisconnectButton: {
-    alignSelf: 'stretch',
+  sessionMetaValue: {
+    color: '#dce6f8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  callControls: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+  },
+  callControlButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 36,
+    borderWidth: 1,
+    height: 72,
+    justifyContent: 'center',
+    width: 72,
+  },
+  callControlActive: {
+    backgroundColor: 'rgba(126, 148, 255, 0.16)',
+    borderColor: 'rgba(150, 166, 255, 0.28)',
+  },
+  callControlIcon: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: '800',
+    lineHeight: 28,
+  },
+  callControlLabel: {
+    color: '#aab5c8',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 10,
+  },
+  endCallButton: {
+    backgroundColor: 'rgba(175, 70, 96, 0.58)',
+    borderColor: 'rgba(255, 151, 170, 0.24)',
+  },
+  endCallIcon: {
+    color: '#ffffff',
+    fontSize: 29,
+    fontWeight: '900',
+    lineHeight: 26,
+    transform: [{ rotate: '180deg' }],
+  },
+  endCallLabel: {
+    color: '#ffc5ce',
   },
   logoRow: {
     alignItems: 'center',
