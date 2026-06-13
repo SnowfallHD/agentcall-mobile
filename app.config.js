@@ -26,6 +26,7 @@ module.exports = ({ config }) => {
       livekitUrl: process.env.EXPO_PUBLIC_LIVEKIT_URL ?? config.extra?.livekitUrl ?? '',
       tokenEndpoint: process.env.EXPO_PUBLIC_AGENT_TOKEN_ENDPOINT ?? config.extra?.tokenEndpoint ?? '',
       defaultRoom: process.env.EXPO_PUBLIC_AGENT_ROOM ?? config.extra?.defaultRoom ?? 'agentcall-demo',
+      buildLabel: process.env.EXPO_PUBLIC_AGENTCALL_BUILD_LABEL ?? config.extra?.buildLabel ?? 'dev-local',
     },
   };
 };

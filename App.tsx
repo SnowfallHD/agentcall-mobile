@@ -21,6 +21,7 @@ type AppExtra = {
   livekitUrl?: string;
   tokenEndpoint?: string;
   defaultRoom?: string;
+  buildLabel?: string;
 };
 
 type TokenResponse = {
@@ -47,6 +48,7 @@ const extra = (Constants.expoConfig?.extra ?? {}) as AppExtra;
 const initialLiveKitUrl = extra.livekitUrl ?? '';
 const initialTokenEndpoint = extra.tokenEndpoint ?? '';
 const initialRoom = extra.defaultRoom ?? 'agentcall-demo';
+const buildLabel = extra.buildLabel ?? 'dev-local';
 const SETTINGS_STORAGE_KEY = 'agentcall.connection-settings.v1';
 
 function randomIdentity(): string {
@@ -415,6 +417,7 @@ export default function App() {
                 The app publishes microphone audio only. Your LiveKit agent owns STT, fast acknowledgements, TTS,
                 interruptions, tools, and session continuity.
               </Text>
+              <Text style={styles.buildLabel}>Build: {buildLabel}</Text>
             </View>
 
             <View style={styles.howItWorksCard}>
@@ -726,6 +729,13 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 13,
     lineHeight: 19,
+  },
+  buildLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   howItWorksCard: {
     backgroundColor: '#08111f',

@@ -3,7 +3,7 @@
     "name": "AgentCall",
     "slug": "agentcall-mobile",
     "scheme": "agentcall",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -20,7 +20,8 @@
         },
         "ITSAppUsesNonExemptEncryption": false
       },
-      "bitcode": false
+      "bitcode": false,
+      "buildNumber": "4"
     },
     "android": {
       "package": "ai.kryden.agentcall",
@@ -50,6 +51,7 @@
       "livekitUrl": "",
       "tokenEndpoint": "",
       "defaultRoom": "agentcall-demo",
+      "buildLabel": "1.0.1-local-http-ats",
       "eas": {
         "projectId": "ccc99767-dbef-4f68-9ba1-d9506ecc6cf3"
       }
