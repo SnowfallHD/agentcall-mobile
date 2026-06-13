@@ -51,7 +51,7 @@ Accepted aliases:
 
 The token endpoint should live on your backend so your LiveKit API secret never ships to the phone.
 
-For private Tailnet/LAN development, standalone iOS builds declare local-network access so endpoints such as `http://100.x.y.z:8787/token` can work after the user grants local network permission. This differs from Expo Go: Expo Go is Expo's own development container and may allow local/dev HTTP paths that a standalone EAS build must declare explicitly.
+For private Tailnet/LAN development, standalone iOS builds declare local-network access so endpoints such as `http://100.x.y.z:8787/token` can work after the user grants local network permission. Preview/development EAS profiles also enable a broader iOS ATS exception for local HTTP because Expo Go is Expo's own development container and may allow local/dev HTTP paths that a standalone EAS build must declare explicitly. Production builds should prefer HTTPS token endpoints.
 
 Useful docs in this repo:
 
