@@ -11,7 +11,13 @@
     "githubUrl": "https://github.com/SnowfallHD/agentcall-mobile",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.kryden.agentcall"
+      "bundleIdentifier": "ai.kryden.agentcall",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "AgentCall connects to your private Tailnet or LAN token server.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "package": "ai.kryden.agentcall",
