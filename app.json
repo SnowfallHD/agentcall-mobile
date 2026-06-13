@@ -15,9 +15,12 @@
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "AgentCall connects to your private Tailnet or LAN token server.",
         "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true
-        }
-      }
+          "NSAllowsLocalNetworking": true,
+          "NSAllowsArbitraryLoads": true
+        },
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bitcode": false
     },
     "android": {
       "package": "ai.kryden.agentcall",
@@ -46,7 +49,10 @@
     "extra": {
       "livekitUrl": "",
       "tokenEndpoint": "",
-      "defaultRoom": "agentcall-demo"
+      "defaultRoom": "agentcall-demo",
+      "eas": {
+        "projectId": "ccc99767-dbef-4f68-9ba1-d9506ecc6cf3"
+      }
     }
   }
 }
