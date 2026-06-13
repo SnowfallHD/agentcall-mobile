@@ -55,10 +55,11 @@ function randomIdentity(): string {
   return `mobile-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function buildTokenUrl(endpoint: string, room: string, identity: string): string {
+function buildTokenUrl(endpoint: string, room: string, identity: string, dispatchAgent = true): string {
   const url = new URL(endpoint);
   url.searchParams.set('room', room);
   url.searchParams.set('identity', identity);
+  if (!dispatchAgent) url.searchParams.set('dispatch', '0');
   return url.toString();
 }
 
@@ -186,7 +187,7 @@ export default function App() {
     setMessage('Testing token endpoint…');
 
     try {
-      const response = await fetch(buildTokenUrl(tokenEndpoint.trim(), roomName.trim(), identity.trim()));
+      const response = await fetch(buildTokenUrl(tokenEndpoint.trim(), roomName.trim(), identity.trim(), false));
       if (!response.ok) throw new Error(`Token endpoint returned HTTP ${response.status}.`);
       const body = (await response.json()) as TokenResponse;
       const parsed = parseTokenResponse(body, liveKitUrl.trim());
@@ -242,6 +243,58 @@ export default function App() {
     setStatus('idle');
     setMessage('Settings reset. Paste your connection details to start again.');
     AsyncStorage.removeItem(SETTINGS_STORAGE_KEY).catch(() => undefined);
+  }
+
+  function handleRoomDisconnected() {
+    setActiveToken(undefined);
+    setActiveUrl(undefined);
+    setStatus('idle');
+    setMessage('Room disconnected.');
+  }
+
+  if (activeUrl && activeToken) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="light" />
+        <LinearGradient colors={["#050b16", "#0b1730", "#07111f"]} style={styles.gradient}>
+          <View style={styles.roomContainer}>
+            <View style={styles.roomHeader}>
+              <Text style={styles.eyebrow}>AgentCall Room</Text>
+              <Text style={styles.roomTitle}>{roomName.trim()}</Text>
+              <Text style={styles.roomMeta}>Joined as {identity.trim()}</Text>
+            </View>
+
+            <LiveKitRoom
+              audio
+              video={false}
+              connect
+              serverUrl={activeUrl}
+              token={activeToken}
+              onConnected={() => {
+                setStatus('connected');
+                setMessage(`Connected to ${roomName.trim()}. Start talking.`);
+              }}
+              onDisconnected={handleRoomDisconnected}
+              onError={(error) => {
+                setStatus('error');
+                setMessage(error.message);
+              }}
+            >
+              <View style={styles.roomCard}>
+                <Text style={styles.liveDot}>●</Text>
+                <Text style={styles.roomStatusTitle}>{status === 'connected' ? 'Voice room live' : 'Joining voice room…'}</Text>
+                <Text style={[styles.statusText, status === 'error' ? styles.errorText : undefined]}>{message}</Text>
+                <Text style={styles.hint}>Talk naturally. The agent worker is dispatched by your token endpoint and listens in this same LiveKit room.</Text>
+              </View>
+            </LiveKitRoom>
+
+            <Pressable accessibilityRole="button" onPress={disconnect} style={[styles.primaryButton, styles.disconnectButton, styles.roomDisconnectButton]}>
+              <Text style={styles.buttonText}>Leave room</Text>
+            </Pressable>
+          </View>
+        </LinearGradient>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -490,6 +543,43 @@ const styles = StyleSheet.create({
   hero: {
     gap: 10,
     paddingTop: 16,
+  },
+  roomContainer: {
+    flex: 1,
+    gap: 22,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  roomHeader: {
+    gap: 8,
+  },
+  roomTitle: {
+    color: '#f8fafc',
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: -0.6,
+  },
+  roomMeta: {
+    color: '#94a3b8',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  roomCard: {
+    alignItems: 'center',
+    backgroundColor: '#0d1728',
+    borderColor: '#0ea5e9',
+    borderRadius: 28,
+    borderWidth: 1,
+    gap: 14,
+    padding: 24,
+  },
+  roomStatusTitle: {
+    color: '#e0f2fe',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  roomDisconnectButton: {
+    alignSelf: 'stretch',
   },
   logoRow: {
     alignItems: 'center',
